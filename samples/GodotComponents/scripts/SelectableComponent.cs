@@ -1,7 +1,7 @@
 ﻿using Godot;
-using tyevco.addons.godot_components;
+using TyEvCo.Addons.GodotComponents;
 
-namespace tyevco.scripts.samples;
+namespace TyEvCo.Samples.GodotComponents.Scripts;
 
 [Component]
 public partial class SelectableComponent : Node

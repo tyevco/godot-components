@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using Godot;
 
-namespace tyevco.addons.godot_components;
+namespace TyEvCo.Addons.GodotComponents;
 
 [Tool]
 public partial class ComponentToolPlugin : EditorPlugin

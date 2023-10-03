@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 
-namespace tyevco.addons.godot_components;
+namespace TyEvCo.Addons.GodotComponents;
 
 [AttributeUsage(AttributeTargets.Class)]
 public class ComponentAttribute : Attribute

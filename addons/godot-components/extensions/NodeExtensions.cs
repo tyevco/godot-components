@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using Godot;
 
-namespace tyevco.addons.godot_components;
+namespace TyEvCo.Addons.GodotComponents;
 
 public static class NodeExtensions
 {
