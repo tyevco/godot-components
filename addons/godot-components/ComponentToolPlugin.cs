@@ -1,6 +1,7 @@
 #if TOOLS
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -11,15 +12,24 @@ namespace TyEvCo.Addons.GodotComponents;
 [Tool]
 public partial class ComponentToolPlugin : EditorPlugin
 {
-    private static readonly Texture2D Texture = GD.Load<Texture2D>("res://addons/godot-components/component_white.png");
+    private const string DEFAULT_ICON_PATH = "res://addons/godot-components/component_white.png";
+
+    private static Texture2D _defaultTexture;
 
     private List<Type> LoadedTypes { get; set; } = new List<Type>();
     private string ProjectRoot { get; set; }
 
     public override void _EnterTree()
     {
-        var componentTypes = ScanAssembly(typeof(ComponentToolPlugin).Assembly);
+        // Load default texture with null check
+        _defaultTexture = GD.Load<Texture2D>(DEFAULT_ICON_PATH);
+        if (_defaultTexture == null)
+        {
+            GD.PrintErr($"Failed to load default component icon texture at: {DEFAULT_ICON_PATH}");
+        }
+
         ProjectRoot = GetProjectRoot();
+        var componentTypes = ScanAssembly(typeof(ComponentToolPlugin).Assembly);
         foreach (var type in componentTypes)
             AddCustomType(type);
     }
@@ -40,13 +50,11 @@ public partial class ComponentToolPlugin : EditorPlugin
 
     private void AddCustomType(Type type)
     {
+        // ScanAssembly() already filters for ComponentAttribute, so this is guaranteed to exist
         var componentAttribute = type.GetCustomAttribute<ComponentAttribute>();
 
-        if (componentAttribute == null)
-            return;
-
+        // Validate that the type inherits from Node
         bool isValid = false;
-
         Type inspectType = type.BaseType;
         while (inspectType != null)
         {
@@ -60,18 +68,61 @@ public partial class ComponentToolPlugin : EditorPlugin
         }
 
         if (!isValid)
+        {
+            GD.PrintErr($"Component {type.Name} does not inherit from Node");
             return;
+        }
 
-        var icon = Texture;
+        // Validate base type
+        var baseTypeName = type.BaseType?.Name;
+        if (string.IsNullOrEmpty(baseTypeName))
+        {
+            GD.PrintErr($"Component {type.Name} has no valid base type");
+            return;
+        }
+
+        // Load icon with proper error handling
+        var icon = _defaultTexture;
         if (!string.IsNullOrWhiteSpace(componentAttribute.IconPath))
-            icon = GD.Load<Texture2D>(componentAttribute.IconPath);
+        {
+            var customIcon = GD.Load<Texture2D>(componentAttribute.IconPath);
+            if (customIcon != null)
+            {
+                icon = customIcon;
+            }
+            else
+            {
+                GD.PrintErr($"Failed to load component icon: {componentAttribute.IconPath}");
+            }
+        }
 
         var typeName = type.Name;
 
-        var scriptPath = componentAttribute.ScriptPath[(ProjectRoot.Length)..].Replace("\\", "/");
-        //GD.Print(scriptPath);
-        AddCustomType(typeName, type.BaseType?.Name, GD.Load<Script>($"res://{scriptPath}"),
-            icon);
+        // Validate and process script path with bounds checking
+        var scriptPath = componentAttribute.ScriptPath;
+        if (string.IsNullOrEmpty(scriptPath))
+        {
+            GD.PrintErr($"Component {typeName} has no script path");
+            return;
+        }
+
+        if (!scriptPath.StartsWith(ProjectRoot))
+        {
+            GD.PrintErr($"Script path is not within project root: {scriptPath}");
+            return;
+        }
+
+        var relativePath = scriptPath[ProjectRoot.Length..].TrimStart('/', '\\').Replace("\\", "/");
+
+        // Load script with null check
+        var script = GD.Load<Script>($"res://{relativePath}");
+        if (script == null)
+        {
+            GD.PrintErr($"Failed to load script for component {typeName}: res://{relativePath}");
+            return;
+        }
+
+        AddCustomType(typeName, baseTypeName, script, icon);
 
         LoadedTypes.Add(type);
     }
@@ -83,7 +134,35 @@ public partial class ComponentToolPlugin : EditorPlugin
 
     private string GetProjectRoot([CallerFilePath] string path = null)
     {
-        return path[0..^46];
+        // Dynamically calculate project root by navigating up from the plugin directory
+        // Expected structure: <project_root>/addons/godot-components/ComponentToolPlugin.cs
+        var pluginDir = Path.GetDirectoryName(path);
+
+        // Navigate up to find project root (parent of 'addons' directory)
+        var currentDir = new DirectoryInfo(pluginDir);
+
+        // Go up until we find the 'addons' directory or reach the root
+        while (currentDir != null && currentDir.Name != "addons")
+        {
+            currentDir = currentDir.Parent;
+        }
+
+        if (currentDir == null)
+        {
+            GD.PrintErr($"Could not find 'addons' directory in path: {path}");
+            return pluginDir; // Fallback to plugin directory
+        }
+
+        // Return the parent of the 'addons' directory (the project root)
+        var projectRoot = currentDir.Parent?.FullName;
+
+        if (projectRoot == null)
+        {
+            GD.PrintErr("Could not determine project root");
+            return pluginDir; // Fallback to plugin directory
+        }
+
+        return projectRoot;
     }
 }
 #endif
